@@ -1,0 +1,27 @@
+# Media — never commit
+*.mp4
+*.mov
+*.wav
+*.m4a
+*.mp3
+
+# Working dirs
+downloads/
+work/
+output/
+
+# Secrets / config
+.env*
+
+# whisper.cpp: third-party clone, rebuilt via setup (not our code)
+whisper.cpp/
+models/
+bin/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store

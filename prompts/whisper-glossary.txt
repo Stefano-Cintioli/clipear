@@ -1,0 +1,6 @@
+# Whisper initial prompt / glossary.
+# whisper.cpp loads this text as the --prompt so it spells your domain's brand
+# names, product names, and people correctly (otherwise it invents phonetic
+# guesses, e.g. a product "Acme" -> "Ackme"). Keep it to one short line of the
+# proper nouns your videos actually use. Replace the examples below.
+Correct terms: Kubernetes, PostgreSQL, GraphQL.
