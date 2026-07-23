@@ -1,94 +1,75 @@
 # clipear
 
-A local, free pipeline that turns a long video (YouTube/X link or local file) into a
-handful of the best short clips for social — driven from [Claude Code](https://claude.com/claude-code)
-as a skill. It transcribes the video, proposes a chapter map and ranked highlight
-candidates, waits for you to pick, then cuts the clips **losslessly** and writes them
-to an output folder, ready for your editor (CapCut, Premiere, etc.).
-
-Everything runs on your machine. No paid APIs — transcription is local via whisper.cpp;
-the transcript analysis happens inside your Claude Code session.
-
-## What it does
-
-1. **Ingest** — downloads the source as **h264/mp4 only** (so clips can be stream-copied
-   without re-encoding) and extracts a 16 kHz mono WAV. Local files skip the download.
-2. **Transcribe** — whisper.cpp `large-v3-turbo` on Metal, auto-detecting the language,
-   with word-level timestamps and a compact per-segment transcript.
-3. **Analyze** — produces a chapter map (primary) plus 15–20 ranked highlight
-   candidates, each with a score, verbatim quote, target audience, and a compliance flag.
-4. **You pick** the segments (chapter IDs, highlight IDs, or raw timecodes).
-5. **Cut & deliver** — lossless stream copy with keyframe-padded starts, named
-   `clip_NN_<topic>.mp4`, into your output folder, with a per-clip log.
+clipear turns a long video (a YouTube/X link or a file on your Mac) into short, ready-to-share
+clips, transcripts, and subtitles — all processed **locally on your own machine**, for free.
+You drive it in plain English through [Claude Code](https://claude.com/claude-code); it transcribes,
+suggests the best moments, waits for you to pick, then cuts the clips and writes subtitle files.
 
 ## Requirements
 
-- **Claude Code**
-- **macOS on Apple Silicon** (this is what it was built and tested on — it uses Metal
-  for whisper.cpp)
-- **Homebrew**, and: `brew install ffmpeg yt-dlp cmake`
-- **Python 3.12**
-- **whisper.cpp** built with Metal + the `large-v3-turbo` model — install with the
-  bundled script (below)
+- A **Mac with Apple Silicon** (M1 or newer)
+- **[Claude Code](https://claude.com/claude-code)** installed
+- About **3 GB of free disk space** (most of it is the speech model)
 
-## Setup
+That's it. No coding needed, no accounts, no API keys.
 
-```sh
-git clone https://github.com/<your-account>/clipear.git
-cd clipear
-brew install ffmpeg yt-dlp cmake
-scripts/setup-whisper.sh          # clones + builds whisper.cpp (Metal), downloads the model (~1.5 GB)
-```
+## Install by pasting this into Claude Code
 
-Output goes to `$OUTPUT_DIR/<slug>/`, default `~/clipear-output`. Point `OUTPUT_DIR` at
-any folder you like (for example a cloud-synced one):
-
-```sh
-export OUTPUT_DIR="$HOME/my-synced-folder/clips"
-```
-
-Before transcribing a new topic, add the proper nouns/brand names your videos use to
-`prompts/whisper-glossary.txt`, and adapt the compliance rules in `prompts/analyze.md`
-to your org.
-
-## Install the skill
-
-Copy the skill so Claude Code can find it, then reload:
-
-- **Project-scoped:** keep `.claude/skills/clipear/` in the repo (already there).
-- **Global:** `cp -r .claude/skills/clipear ~/.claude/skills/clipear`
-
-## Usage
-
-In Claude Code:
+Open Claude Code and paste this message:
 
 ```
-/clipear <youtube-url | x-url | local-file-path>
+I want to set up clipear, a free local video clipping tool.
+Repo: https://github.com/Stefano-Cintioli/clipear
+1. Check I'm on macOS with Apple Silicon; if not, stop and tell me what's supported.
+2. Clone the repo to ~/clipear.
+3. Follow its setup skill: install ffmpeg, yt-dlp and cmake with Homebrew (tell me first if Homebrew itself is missing), build whisper.cpp with Metal, download the large-v3-turbo model (~1.6 GB), verify with a sample transcription.
+4. Show me evidence each step worked, then explain how to use /clipear.
+Everything stays local on my machine. Do not install anything beyond what's listed.
 ```
 
-It ingests, transcribes, shows the chapter map + ranked highlights, then **stops**.
-Reply with your picks — chapter IDs (`C4`), highlight IDs (`H1, H3`), or raw ranges
-(`12:30-18:45`) — and it cuts and delivers.
+Claude Code will **ask your permission before running each command** — reading those prompts
+is encouraged, especially the first time. You can approve them one by one; nothing runs without
+your say-so.
 
-**One video per session.** Run `/clear` before the next one so transcripts and picks
-don't bleed across videos.
+## How to use it
 
-## Limitations & honest notes
+Once setup finishes, use the `/clipear` command with a source:
 
-- **Clip starts are keyframe-padded.** Lossless stream copy can only cut on keyframes,
-  so each clip begins on the keyframe at or just before your in-point — you get up to a
-  few extra seconds of head, which you trim in your editor. It never loses your opening
-  words, and it never re-encodes.
-- **X/Twitter path is wired but untested.** It uses the same yt-dlp code path as YouTube
-  but hasn't been validated against a real X video; X often needs `--cookies-from-browser`.
-- **YouTube extraction breaks periodically.** When ingest suddenly starts failing, the
-  first fix is almost always `brew upgrade yt-dlp`.
-- Built and tested on Apple Silicon macOS. Other platforms may work with changes to the
-  whisper.cpp build flags but are untested.
+- **A YouTube video:**
+  `/clipear https://www.youtube.com/watch?v=XXXXXXXXXXX`
+- **A file already on your Mac:**
+  `/clipear ~/Movies/interview.mp4`
+- **Subtitles for a clip:** ask for them after processing —
+  `make an SRT subtitle file for that clip` (you'll get a `.srt` you can import into CapCut or Premiere).
+
+clipear transcribes, shows you a chapter map and a ranked list of the best moments, then **stops
+and waits**. You reply with what to keep (chapter numbers, highlight numbers, or exact timecodes
+like `12:30-18:45`), and it cuts the clips into a folder for you.
+
+**One video per session** — run `/clear` before starting the next one so things don't get mixed up.
+
+## Honest limitations
+
+- **macOS Apple Silicon only** in v1. Intel Macs, Windows, and Linux aren't supported yet.
+- **Clip starts snap to keyframes.** Lossless cuts can only begin on a keyframe, so a clip may
+  include a couple of extra seconds at the front (trim it in your editor). No words are ever lost.
+- **X / Twitter links are untested.** They use the same download path as YouTube but haven't been
+  verified; they may need extra login steps.
+- **YouTube changes break downloading now and then.** When downloads suddenly fail, the usual fix
+  is to run `brew upgrade yt-dlp`.
+
+## Privacy
+
+Everything runs **on your machine**. No accounts, no API keys, no cloud services — your video and
+its transcript are never uploaded anywhere. Transcription is done locally by whisper.cpp.
 
 ## Rights
 
-Use this only on content you have the rights to download, clip, and republish.
+Use clipear only on content you have the rights to download, clip, and republish.
+
+## Contributing
+
+Contributions are very welcome — **Windows and Linux support especially**. Open an issue or PR.
 
 ## License
 

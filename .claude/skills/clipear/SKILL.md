@@ -1,71 +1,71 @@
 ---
 name: clipear
-description: Turn a long video (YouTube URL, X URL, or local file path) into short social clips. Runs the local clipear pipeline — ingest (h264/mp4, stream-copy safe), transcribe (whisper.cpp large-v3-turbo on Metal, auto-detect language), analyze into a chapter map + ranked highlight candidates with compliance flags, then after the user picks, cut losslessly (stream copy + keyframe padding) and deliver to the output folder. Manual trigger only.
+description: Turn a long video (YouTube URL, X URL, or local file path) into short social clips, transcripts, and subtitles. Runs the local clipear pipeline — ingest (h264/mp4, stream-copy safe), transcribe (whisper.cpp large-v3-turbo on Metal, auto-detect language), analyze into a chapter map + ranked highlight candidates, then after the user picks, cut losslessly and deliver. Also does SRT subtitles (sidecar), in-session translation, and filler detection/removal. Manual trigger only.
 disable-model-invocation: true
 ---
 
 # clipear
 
-Local, free pipeline: long video in → transcript + chapters → user picks segments →
-lossless clips in the output folder, ready for editing. See `README.md` for setup and
-`CLAUDE.md` for the hard rules. Never commit media or secrets.
+Local, free pipeline: long video in → transcript, chapters, subtitles → user picks →
+lossless clips + SRT in the output folder. See `README.md` for setup and `CLAUDE.md` for
+the hard rules. Never commit media or secrets. First-time setup: run the `clipear-setup` skill.
 
 `$ARGUMENTS` = one source: a YouTube URL, an X URL, or a local file path.
 
 ## One video per session
-Process exactly ONE video per session. Tell the user to `/clear` before starting
-another — a fresh context keeps transcripts and picks from bleeding across videos.
+Process exactly ONE video per session. Tell the user to `/clear` before starting another.
 
-## Workflow
+## Core workflow (clipping)
 
-### 0. Glossary check (before running)
-If this video is a **new content vertical** (new brands, product names, or people
-whisper won't know), remind the user to add those terms to
-`prompts/whisper-glossary.txt` first — it's auto-loaded at transcription and prevents
-brand manglings. If it's the same domain as before, proceed.
+### 0. Glossary check
+If this is a new content vertical (new brands, products, or people), remind the user to
+add those terms to `prompts/whisper-glossary.txt` first — it's auto-loaded at transcription
+and prevents proper-noun manglings.
 
-### 1. Ingest
-Run `scripts/ingest.sh "$ARGUMENTS"`.
-- Downloads **h264/mp4 only** (stream-copy safe). If a video has no h264 stream, the
-  script STOPS and lists options — do not work around it silently.
-- Reports the resolution-vs-compatibility tradeoff when a higher resolution exists
-  only in VP9/AV1. Surface that to the user.
-- Local files skip download. Produces the 16 kHz mono WAV.
-- Show the codec/resolution/duration-match evidence block.
+### 1. Ingest — `scripts/ingest.sh "$ARGUMENTS"`
+h264/mp4 only (stream-copy safe); STOPS with options if a video has no h264 stream. Local
+files skip download. Produces the 16 kHz mono WAV. Show the codec/resolution/duration evidence.
 
-### 2. Transcribe
-Run `scripts/transcribe.sh <slug>` (slug is printed by ingest).
-- whisper.cpp `large-v3-turbo` on Metal, auto-detect language, glossary auto-loaded.
-- Show detected language, x-factor, the 3 accuracy excerpts, and the domain-term scan.
-- If a brand/name is still mangled, add it to the glossary and re-run once.
+### 2. Transcribe — `scripts/transcribe.sh <slug>`
+whisper.cpp large-v3-turbo on Metal, auto-detect language, glossary auto-loaded. Show
+detected language, x-factor, excerpts, domain-term scan. If a name is still mangled, add it
+to the glossary and re-run once.
 
-### 3. Analyze
-Follow `prompts/analyze.md` exactly:
-- **Read ONLY** `work/<slug>.segments.txt` (the compact file). NEVER load the word JSON.
-- Output in the **video's language**.
-- **Chapter map is the primary output** — C1..Cn, full runtime, no gaps.
-- **15–20 ranked highlight candidates** H1..Hn: cut range ≤60s snapped to sentence
-  boundaries, score 1–10, verbatim quote, why it works, target audience, and a
-  **mandatory compliance flag** (per your org's rules in analyze.md).
-- Speaker labels in the file are a heuristic guess — attribute by content, stay neutral otherwise.
+### 3. Analyze — follow `prompts/analyze.md` exactly
+Read ONLY `work/<slug>.segments.txt` (never the word JSON). Output in the video's language.
+Chapter map (primary) + 15–20 ranked highlight candidates with a mandatory compliance flag.
 
 ### 4. STOP — wait for picks
-Present both views and **wait**. The user replies with chapter IDs (`C4`), highlight
-IDs (`H1, H3`), and/or raw ranges (`12:30-18:45`). **Never cut without picks.**
+Present both views and wait. User replies with chapter IDs, highlight IDs, or raw ranges.
+**Never cut without picks.**
 
-### 5. Cut & deliver
-Write a picks file (`topic-slug|start_sec|end_sec|compliance` per line, in pick order)
-and run `scripts/cut.sh <slug> <source-url> <picks-file>`.
-- Lossless stream copy with keyframe-padded start (no words lost, no re-encode).
-- `clip_NN_<topic-slug>.mp4` in pick order → `$OUTPUT_DIR/<slug>/` (default `~/clipear-output`).
-- Writes `notes/<slug>.md` (source, date, per-clip requested/actual/duration/size/compliance —
-  no transcript content).
-- Show the per-clip ffprobe evidence (codec/res identical to master = no re-encode),
-  duration deltas, the output folder listing, and confirm `git status` is clean.
+### 5. Cut & deliver — write a picks file, run `scripts/cut.sh <slug> <source-url> <picks-file>`
+Lossless stream copy with keyframe-padded start. `clip_NN_<topic>.mp4` in pick order →
+`$OUTPUT_DIR/<slug>/`. Writes `notes/<slug>.md`. Show per-clip ffprobe evidence (codec/res
+identical to master = no re-encode) and confirm `git status` is clean.
 
-### Vertical (optional, on request)
-Only if the user asks: preview a static 9:16 crop as a still, get approval, then
-re-encode that clip to vertical. Default output stays lossless horizontal.
+## Subtitles (SRT sidecar) — `scripts/subtitles.sh <slug> [--lang <code>]`
+Produces `$OUTPUT_DIR/<slug>/<slug>.srt` — short, one-line cues that import cleanly into
+CapCut / Premiere. **v1 outputs SRT only; no burned-in captions.** After generating:
+- **Fix proper nouns:** review the SRT against the glossary and correct obvious
+  mis-transcriptions of brands/names; change nothing else.
+- Deliver the `.srt` alongside the video for the editor to style.
+
+## Translation (in-session, no API) — agent task, not a script
+To translate subtitles, the agent translates the SRT text **in-session** (never via a paid
+API or key). Rules: keep **every timestamp block byte-for-byte identical** (index + `-->`
+times), translate only the text lines, and keep glossary proper nouns unchanged. Write to
+`<slug>.<targetlang>.srt` (e.g. `talk.en.srt`). This is how ES↔EN (or any pair) is done.
+
+## Filler detection — `scripts/find-fillers.py <slug.json> [fillers...]`
+Lists every filler occurrence with a 3-word context window and per-word counts, read from
+the word JSON (never dumps the JSON). Default fillers are English; pass your own for the
+video's language. Use the context to tell real words from fillers before removing anything.
+
+## Filler removal (precise mode, re-encodes) — `scripts/remove-fillers.py <slug.json> <source> <out> <fc.txt> [fillers...]`
+Cuts the listed fillers and re-encodes the whole video once with `h264_videotoolbox`,
+keeping a ~150 ms buffer around neighbouring words so nothing sounds chopped. Reports
+before/after duration and number of cuts. Only run after the user approves which fillers.
 
 ## Failure handling
 On any stage failure: one-line diagnosis, then stop and wait. No auto-retry, no silent
