@@ -1,0 +1,63 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-15-intel, macos-15]
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install FFmpeg on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - name: Install FFmpeg on macOS
+        if: runner.os == 'macOS'
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            brew install ffmpeg
+          fi
+      - name: Install FFmpeg on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install ffmpeg --yes --no-progress
+      - name: Require media tools
+        run: python -c "import shutil, subprocess; assert shutil.which('ffmpeg'), 'FFmpeg missing; media smoke tests must not be skipped'; assert shutil.which('ffprobe'), 'ffprobe missing'; subprocess.run(['ffmpeg', '-version'], check=True); subprocess.run(['ffprobe', '-version'], check=True)"
+      - name: Create isolated Python environment
+        run: python -m venv .venv
+      - name: Install package on macOS or Linux
+        if: runner.os != 'Windows'
+        run: .venv/bin/python -m pip install -e .
+      - name: Install package on Windows
+        if: runner.os == 'Windows'
+        run: .\.venv\Scripts\python.exe -m pip install -e .
+      - name: Run tests on macOS or Linux
+        if: runner.os != 'Windows'
+        run: .venv/bin/python -m unittest discover -s tests -v
+      - name: Run tests on Windows
+        if: runner.os == 'Windows'
+        run: .\.venv\Scripts\python.exe -m unittest discover -s tests -v
+      - name: Check CLI entry point on macOS or Linux
+        if: runner.os != 'Windows'
+        run: .venv/bin/python -m clipear --help
+      - name: Check CLI entry point on Windows
+        if: runner.os == 'Windows'
+        run: .\.venv\Scripts\python.exe -m clipear --help

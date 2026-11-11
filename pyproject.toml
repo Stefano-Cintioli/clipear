@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clipear"
+version = "0.2.0"
+description = "Portable video clipping tools with a human-approved MCP workflow"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = ["mcp==2.3.0", "yt-dlp==2026.10.26"]
+
+[project.scripts]
+clipear = "clipear.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+clipear = ["assets/fonts/*.ttf", "assets/fonts/LICENSE.txt"]

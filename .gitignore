@@ -22,6 +22,18 @@ bin/
 .venv/
 __pycache__/
 *.pyc
+*.egg-info/
+build/
+dist/
+.superpowers/
+.venv-smoke/
+.clipear/
+notes/
+*.srt
+*.ass
+*.vtt
+*.mkv
+*.webm
 
 # macOS
 .DS_Store
