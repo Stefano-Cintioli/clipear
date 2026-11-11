@@ -5,16 +5,18 @@ FFmpeg/ffprobe 8.1.2, MCP SDK 2.3.0 and yt-dlp 2026.10.26.
 
 ## Automated checks
 
-`python -m unittest discover -s tests -v`: **63 tests passed**, no skips, in
-17.470 seconds on the verification host. Checks include real FFmpeg exports,
+`python -m unittest discover -s tests -v`: **65 tests passed**, no skips, in
+50.210 seconds on the final verification run. Checks include real FFmpeg exports,
 approval invalidation, frozen job snapshots, unexpected worker exits, caption
 boundaries, path restrictions, stdio reconnection and authenticated HTTP.
 
-The production MCP integration test starts the actual server over stdio in four
-separate client sessions. It imports real generated media, reconnects, proposes
-an edit, verifies unapproved rendering fails, records fixture-only approval
-outside MCP, renders, reconnects and checks the resulting H.264/AAC media.
-The fixture approval is test setup, not an agent approval capability.
+The production MCP integration test imports real generated media, reconnects,
+proposes an edit, verifies unapproved rendering fails, records fixture-only
+approval outside MCP, renders, reconnects and checks the resulting H.264/AAC
+media. It uses four actual stdio sessions on macOS/Linux and four actual network
+HTTP sessions on every platform. Windows additionally checks actual stdio
+background rejection with no queued jobs. The fixture approval is test setup,
+not an agent approval capability.
 
 A wheel was built and installed into a second clean virtual environment. Package
 version, CLI entry point, dependency consistency, MCP startup and bundled font
@@ -55,7 +57,13 @@ publication review found no blockers in CI, setup or compatibility documentation
 The [CI workflow](../.github/workflows/test.yml) exercises Python 3.11/3.12 on
 Ubuntu, Windows, Intel macOS and Apple Silicon macOS. Its actual results are
 available from [GitHub Actions](https://github.com/Stefano-Cintioli/clipear/actions/workflows/test.yml).
-At this local checkpoint, native CI results are still pending.
+See the latest [PR #1 checks](https://github.com/Stefano-Cintioli/clipear/pull/1/checks)
+for the release commit's native results. The first run caught portability gaps:
+fixture cleanup before worker/observer exit, implicit Windows decoding in two
+caption tests, Mac FFmpeg without libass, and Windows stdio clients killing
+descendants on disconnect. Fixes use explicit observer joins, UTF-8 reads,
+feature-checked caption-enabled binaries and separately hosted authenticated HTTP
+for Windows background processing. The full matrix is rerun for the correction.
 
 Native Claude, Codex, ChatGPT and Grok apps have not been registered or tested by
 this run. Successful MCP protocol checks do not prove an app-specific integration.

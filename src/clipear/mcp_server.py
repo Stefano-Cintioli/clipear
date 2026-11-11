@@ -11,6 +11,7 @@ import hmac
 import inspect
 import os
 import re
+import sys
 from typing import Any
 
 from mcp.server import MCPServer
@@ -20,7 +21,14 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 
-def create_server(service=None) -> MCPServer:
+_WINDOWS_STDIO_LIMITATION = (
+    "Windows stdio cannot keep background jobs alive when the MCP client's Windows Job Object closes. "
+    "Start a separately launched authenticated HTTP server with clipear mcp --transport streamable-http "
+    "and connect to http://127.0.0.1:8765/mcp. Set CLIPEAR_HTTP_TOKEN before starting that server."
+)
+
+
+def create_server(service=None, *, transport: str = "stdio") -> MCPServer:
     """Build the SDK server; an injected service permits isolated protocol tests."""
     if service is None:
         from .config import Settings
@@ -28,6 +36,7 @@ def create_server(service=None) -> MCPServer:
 
         service = Service(Settings.from_env())
 
+    background_limitation = _WINDOWS_STDIO_LIMITATION if sys.platform == "win32" and transport == "stdio" else None
     server = MCPServer(
         "clipear", version="0.2.0", log_level="WARNING",
         instructions=(
@@ -36,7 +45,8 @@ def create_server(service=None) -> MCPServer:
             "No MCP tool can approve. Then render_approved_plan queues a persisted job. "
             "Poll get_job for long operations. Files must be accessible on this processing "
             "host and inside host-configured input roots. This tool boundary does not "
-            "restrict unrestricted operating-system access."
+            "restrict unrestricted operating-system access. "
+            + (background_limitation or "")
         ),
     )
     allowed_arguments: dict[str, set[str]] = {}
@@ -52,6 +62,13 @@ def create_server(service=None) -> MCPServer:
         return decorate
 
     def invoke(method: str, **arguments) -> dict:
+        if background_limitation and method in {
+            "import_source", "transcribe_source", "preview_edit_plan", "render_approved_plan",
+        }:
+            # Windows SDK clients may own a kill-on-close Job Object containing
+            # every stdio descendant. Console/process-group detachment cannot
+            # prevent that client from killing a queued worker on disconnect.
+            raise ToolError(background_limitation)
         try:
             return getattr(service, method)(**arguments)
         except (ValueError, PermissionError, FileNotFoundError, RuntimeError) as error:
@@ -62,7 +79,10 @@ def create_server(service=None) -> MCPServer:
     @register(read_only=True)
     def check_setup() -> dict[str, Any]:
         """Check host dependencies and configuration without changing machine settings."""
-        return invoke("check_setup")
+        return {**invoke("check_setup"), "mcp_transport": {
+            "name": transport, "background_jobs_supported": not bool(background_limitation),
+            "limitation": background_limitation,
+        }}
 
     @register(open_world=True)
     def import_source(source: str) -> dict[str, Any]:
@@ -164,14 +184,14 @@ def create_http_app(service=None, *, token: str | None = None, host: str = "127.
     secret = os.environ.get("CLIPEAR_HTTP_TOKEN") if token is None else token
     if not secret or re.fullmatch(r"[A-Za-z0-9\-._~+/]+=*", secret) is None:
         raise ValueError("Set CLIPEAR_HTTP_TOKEN to a nonempty bearer token before starting HTTP")
-    app = create_server(service).streamable_http_app(host=host, json_response=True)
+    app = create_server(service, transport="streamable-http").streamable_http_app(host=host, json_response=True)
     return _BearerAuth(app, secret)
 
 
 def run_server(transport: str = "stdio", host: str = "127.0.0.1", port: int = 8765) -> None:
     """Start stdio (default) or authenticated Streamable HTTP using host settings."""
     if transport == "stdio":
-        create_server().run(transport="stdio")
+        create_server(transport="stdio").run(transport="stdio")
     elif transport == "streamable-http":
         import uvicorn
 

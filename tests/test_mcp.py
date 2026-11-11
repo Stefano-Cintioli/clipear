@@ -74,13 +74,34 @@ def with_client(test):
     @wraps(test)
     async def run(self):
         from clipear.mcp_server import create_server
-        async with Client(create_server(FakeService()), mode="legacy") as client:
+        async with Client(create_server(FakeService(), transport="embedded"), mode="legacy") as client:
             self.client = client
             await test(self)
     return run
 
 
 class MCPBoundaryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_windows_stdio_reports_and_rejects_background_work(self):
+        from clipear.mcp_server import create_server
+        with patch("sys.platform", "win32"):
+            server = create_server(FakeService(), transport="stdio")
+        async with Client(server, mode="legacy") as client:
+            setup = await client.call_tool("check_setup")
+            self.assertFalse(setup.structured_content["mcp_transport"]["background_jobs_supported"])
+            self.assertIn("separately", setup.structured_content["mcp_transport"]["limitation"])
+            for name, arguments in [
+                ("import_source", {"source": "https://www.youtube.com/watch?v=fixture"}),
+                ("transcribe_source", {"source_id": "source-123"}),
+                ("preview_edit_plan", {"plan_id": "plan-123"}),
+                ("render_approved_plan", {"plan_id": "plan-123"}),
+            ]:
+                result = await client.call_tool(name, arguments)
+                self.assertTrue(result.is_error)
+                self.assertIn("streamable-http", error_text(result))
+                self.assertIn("separately", error_text(result))
+            plan = await client.call_tool("get_edit_plan", {"plan_id": "plan-123"})
+            self.assertFalse(plan.is_error)
+
     @with_client
     async def test_only_small_engine_surface_and_no_machine_or_approval_inputs(self):
         tools = (await self.client.list_tools()).tools

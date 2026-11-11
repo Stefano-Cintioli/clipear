@@ -55,8 +55,17 @@ FFmpeg reads camera formats and makes clips. ffprobe inspects source and output
 files. Use the [FFmpeg download page](https://ffmpeg.org/download.html) for upstream
 source and linked platform builds.
 
-- **macOS:** if Homebrew is already installed, `brew install ffmpeg` is one option.
-  Do not install Homebrew silently as part of an agent setup.
+- **macOS:** check the build's caption capability before selecting it. The regular
+  Homebrew `ffmpeg` formula can omit libass. On Apple Silicon, the official
+  [Homebrew `ffmpeg-full` formula](https://formulae.brew.sh/formula/ffmpeg-full)
+  supplies libass and x264 with prebuilt bottles. It is keg-only, so configure
+  `CLIPEAR_FFMPEG` and `CLIPEAR_FFPROBE` to its executables, as shown below. Current
+  bottle availability varies by OS/architecture; do not start a large source build
+  on an Intel Mac assuming the same bottles exist. For Intel, the
+  [Evermeet static builds](https://evermeet.cx/ffmpeg/) linked by FFmpeg provide
+  libass and libx264; choose matching ffmpeg/ffprobe releases and configure their
+  executable paths. Evermeet supplies third-party binaries; FFmpeg itself publishes
+  source code. Do not install Homebrew silently.
 - **Ubuntu / Debian:** your package manager provides `ffmpeg`, for example
   `sudo apt install ffmpeg`. Other Linux distributions use different package names
   or commands.
@@ -73,9 +82,23 @@ clipear doctor
 ```
 
 Clean video exports require an H.264 encoder; the common CPU baseline is libx264.
-Burned captions also require libass and the FFmpeg ASS/subtitle filter. Builds can
+Burned captions also require libass and the FFmpeg `subtitles` filter. Builds can
 differ even when they share a version number. Use `doctor` and a real small export
-to check your build. See [FFmpeg's filter documentation](https://ffmpeg.org/ffmpeg-filters.html#ass).
+to check your build. See [FFmpeg's filter documentation](https://ffmpeg.org/ffmpeg-filters.html#subtitles-1).
+
+With Homebrew already installed on a supported Apple Silicon Mac, select its
+full prebuilt formula explicitly:
+
+```sh
+brew install --force-bottle ffmpeg-full
+export CLIPEAR_FFMPEG="$(brew --prefix ffmpeg-full)/bin/ffmpeg"
+export CLIPEAR_FFPROBE="$(brew --prefix ffmpeg-full)/bin/ffprobe"
+clipear doctor
+```
+
+This selects the keg-only binaries for clipear without replacing your system's
+other FFmpeg installation. Give an MCP desktop client these same executable paths
+in its environment; terminal exports alone may not reach it.
 
 ## 3. Add local transcription
 
@@ -237,8 +260,9 @@ run `clipear transcript --help`; `clipear --help` lists the installed commands.
 
 ## Connect an MCP client
 
-Use stdio when the agent client can start a local process. It does not need an
-HTTP listener or a bearer token.
+On macOS/Linux, use stdio when the agent client can start a local process. It does
+not need an HTTP listener or a bearer token. On Windows, use a separately launched
+authenticated HTTP server as described below.
 
 Desktop apps usually do not inherit a virtual environment activated in your
 terminal. Set the server's `command` to the absolute path of that environment's
@@ -255,12 +279,6 @@ For a terminal check on macOS/Linux, replace this example path:
 
 ```sh
 "/absolute/path/to/clipear/.venv/bin/python" -m clipear mcp --transport stdio
-```
-
-For Windows PowerShell:
-
-```powershell
-& "C:\path\to\clipear\.venv\Scripts\python.exe" -m clipear mcp --transport stdio
 ```
 
 For clients using a `mcpServers` JSON configuration, a macOS/Linux starting point is:
@@ -281,24 +299,6 @@ For clients using a `mcpServers` JSON configuration, a macOS/Linux starting poin
 }
 ```
 
-On Windows, JSON paths need doubled backslashes:
-
-```json
-{
-  "mcpServers": {
-    "clipear": {
-      "command": "C:\\path\\to\\clipear\\.venv\\Scripts\\python.exe",
-      "args": ["-m", "clipear", "mcp", "--transport", "stdio"],
-      "env": {
-        "CLIPEAR_INPUT_ROOTS": "C:\\path\\to\\camera-files",
-        "CLIPEAR_WHISPER": "C:\\path\\to\\whisper-cli.exe",
-        "CLIPEAR_MODEL": "C:\\path\\to\\ggml-base.bin"
-      }
-    }
-  }
-}
-```
-
 These paths are placeholders; replace every one with a location on the processing
 host. If you set `CLIPEAR_HOME`, use the same value for human CLI review. See also
 [examples/mcp.json](../examples/mcp.json). Your client's format and settings
@@ -309,6 +309,34 @@ explains the client/server model. Consult your client's own current instructions
 this repository does not claim every native app has been connected and tested.
 An agent needs the transcript tool, plan tools, and job polling; it does not get
 an approval tool.
+
+### Windows: use a separately launched HTTP server
+
+The pinned SDK's Windows stdio client closes a kill-on-close Windows Job Object
+when it disconnects. That can kill queued workers along with the stdio server.
+Console/process-group detachment does not avoid this behavior; see Microsoft's
+[Job Object lifetime documentation](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects).
+clipear therefore rejects import, transcription, preview, and render submissions
+over Windows stdio, and `check_setup` reports the limitation. Reading existing
+transcripts/jobs and creating/inspecting plans still work over stdio.
+
+Start HTTP yourself in a separate PowerShell terminal, using the same input roots,
+tools/model, and storage configured above. For example, from the clipear folder:
+
+```powershell
+$env:CLIPEAR_HTTP_TOKEN = & .\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(32))"
+$env:CLIPEAR_INPUT_ROOTS = "C:\path\to\camera-files"
+.\.venv\Scripts\python.exe -m clipear mcp --transport streamable-http --host 127.0.0.1 --port 8765
+```
+
+Keep that terminal running while jobs process. Configure your MCP client's
+Streamable HTTP connection to `http://127.0.0.1:8765/mcp` and its private bearer
+authentication setting to the generated `CLIPEAR_HTTP_TOKEN` value. The request
+header is `Authorization: Bearer <token>`. Client formats differ; use its documented
+URL/authentication fields. A client that only supports stdio cannot submit Windows
+background jobs through this MCP adapter; the regular CLI remains available.
+Do not have the stdio client launch the HTTP host as its child, which would put
+the host back under that client's process lifetime.
 
 ### Optional HTTP or remote worker
 
@@ -341,8 +369,9 @@ prints the local review URL. `--port PORT` chooses its loopback port, and
 must open that private link using trusted access to the host. Keep the command
 running until approval or expiry, and do not share the review URL.
 
-Poll `job JOB_ID` after starting import, transcription, preview, or render. Their
-workers are detached from the MCP connection and retain job state, but are not a
+Poll `job JOB_ID` after starting import, transcription, preview, or render through
+the CLI, macOS/Linux stdio, or a separately launched HTTP host. Their workers are
+detached from the MCP connection and retain job state, but are not a
 system service: shutdown, forced termination, missing executables, or unavailable
 storage can still interrupt processing. Check the recorded error rather than
 assuming a disconnected client means success.
@@ -364,6 +393,9 @@ assuming a disconnected client means success.
   and the home used by review. A changed plan needs fresh approval.
 - **Command unavailable:** use the virtual environment's Python with `-m clipear`
   to avoid accidentally running a different installation.
+- **Windows stdio rejects background work:** start the authenticated HTTP host
+  separately and connect to its URL, as above. Do not retry the same submission
+  through stdio or assume a queued job survived its client's process cleanup.
 
 ## Legacy Apple Silicon setup
 

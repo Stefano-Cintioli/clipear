@@ -69,7 +69,7 @@ class CaptionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "cues.srt"
             write_srt(path, [{"start": 0.0001, "end": 61.9996, "text": "Olá, BNB Chain!\nSecond line"}])
-            self.assertEqual(path.read_text(), "1\n00:00:00,000 --> 00:01:02,000\nOlá, BNB Chain!\nSecond line\n\n")
+            self.assertEqual(path.read_text(encoding="utf-8"), "1\n00:00:00,000 --> 00:01:02,000\nOlá, BNB Chain!\nSecond line\n\n")
 
     def test_burn_caption_size_tracks_short_edge_for_portrait_and_landscape(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -77,7 +77,7 @@ class CaptionTests(unittest.TestCase):
             for width, height in ((1920, 1080), (1080, 1920)):
                 path = Path(temporary) / f"{width}-{height}.ass"
                 write_ass(path, [{"start": 0, "end": 1, "text": "Readable captions"}], width, height)
-                style = next(line for line in path.read_text().splitlines() if line.startswith("Style:"))
+                style = next(line for line in path.read_text(encoding="utf-8").splitlines() if line.startswith("Style:"))
                 sizes.append(int(style.split(",")[2]))
             self.assertEqual(sizes, [52, 52])
 

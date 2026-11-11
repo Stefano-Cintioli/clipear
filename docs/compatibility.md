@@ -18,20 +18,34 @@ The labels follow GitHub's [hosted runner reference](https://docs.github.com/en/
 Those jobs install FFmpeg, require it to be discoverable, install clipear in an
 isolated virtual environment, and run standard-library unit tests, including
 actual media fixtures. A workflow file alone does not show that these runs passed.
+Before tests, CI checks the actual `subtitles` filter and `libx264` encoder, rather
+than accepting a version check. Mac runners retain a preinstalled build only if
+both features exist; the Apple Silicon fallback is Homebrew's keg-only
+[`ffmpeg-full` bottle](https://formulae.brew.sh/formula/ffmpeg-full), with its bin
+folder explicitly added to the job's PATH. Its [formula](https://github.com/Homebrew/homebrew-core/blob/HEAD/Formula/f/ffmpeg-full.rb)
+enables libass and libx264. Current full-formula bottles do not cover Intel Mac;
+the Intel fallback uses [Evermeet's FFmpeg/ffprobe 9.0.2 static releases](https://evermeet.cx/ffmpeg/),
+the third-party macOS provider linked by [FFmpeg's download page](https://ffmpeg.org/download.html).
+The workflow pins both ZIP archive hashes before extraction. Their detached
+signatures were checked against Evermeet's published signing-key fingerprint
+`20F6EA3E0CFD6B4C53447A73476C4B611A660874` when selecting the artifacts. Neither
+fallback compiles FFmpeg from source, and finished-caption tests remain enabled.
 
-**Current native status:** no CI run is claimed by this document. Record local
-end-to-end evidence and actual CI results with host, Python, FFmpeg, and whisper.cpp
-versions before broadening that claim. Windows ARM and Linux ARM are not in this
-matrix. Upstream tool availability on an architecture does not prove clipear was
-tested there.
+**Native results:** inspect the latest commit's [pull request checks](https://github.com/Stefano-Cintioli/clipear/pull/1/checks)
+and [main-branch runs](https://github.com/Stefano-Cintioli/clipear/actions/workflows/test.yml).
+Each job records the host, Python and FFmpeg versions and its actual test result.
+Local speech-model and browser checks are recorded in [verification](verification.md).
+Windows ARM and Linux ARM are not in this matrix. Upstream tool availability on
+an architecture does not prove clipear was tested there.
 
 ## Processing tools
 
 - Python 3.11+ is required; CI currently exercises 3.11/3.12.
 - FFmpeg and ffprobe are external. The common output baseline is software H.264
   with square pixels, yuv420p, and AAC when input audio exists.
-- Finished burned captions need an FFmpeg build with libass/ASS support. A clean
-  export does not prove that capability works. `doctor` reports it.
+- Finished burned captions need an FFmpeg build with libass and the `subtitles`
+  filter. `doctor` reports ASS-filter support; CI checks `subtitles` specifically.
+  Verify an actual finished export, since a clean export does not exercise captions.
 - whisper.cpp and its model are external. The engine calls the configured
   executable; CPU works as the baseline. Metal/CUDA/Vulkan depend on the chosen
   upstream build and hardware and are not a clipear speed guarantee.
@@ -78,6 +92,29 @@ The server offers stdio and authenticated Streamable HTTP. Protocol tests should
 cover actual initialization, tool discovery/calls, authorization failures, and
 the absence of an approval tool. Successful protocol tests do not establish a
 tested native-app integration.
+
+### Windows MCP lifetime
+
+Windows background processing uses a separately launched authenticated HTTP host.
+The pinned SDK's stdio client assigns its server to a kill-on-close Windows Job
+Object and closes that object on disconnect, terminating descendant workers too.
+Windows console/process-group detachment does not remove this association; see
+[Microsoft's Job Object documentation](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects).
+
+clipear's Windows stdio server reports `background_jobs_supported: false` in
+`check_setup` and rejects import, transcription, preview, and render submissions
+with instructions to use HTTP. It still permits setup, transcript/job reads,
+and plan creation/inspection. This is an explicit transport limitation, not a
+claim that Windows stdio jobs survive disconnect.
+
+The production integration test checks actual Windows stdio rejection and a
+separate HTTP host's import, plan, human-approval boundary, render, and reconnect
+workflow over real SDK network connections. On macOS/Linux, it additionally runs
+that workflow over real CLI stdio connections. It joins HTTP worker observer
+threads before removing temporary files, and includes job state, audit events,
+and retained log tails in a failure. Native test results must still be recorded
+before claiming a specific platform/version passed. See the
+[Windows connection instructions](setup.md#windows-use-a-separately-launched-http-server).
 
 No native Claude Desktop, Claude Code, Codex, ChatGPT, or Grok connection is
 claimed here without a recorded client/version/run. Clients vary in support for

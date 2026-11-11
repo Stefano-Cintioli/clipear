@@ -10,10 +10,29 @@ import time
 import unittest
 import warnings
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from clipear.config import Settings
 from clipear.service import Service
+
+
+def track_worker_observers(test):
+    """Retain the real waiter threads without changing detached job behavior."""
+    test.worker_observers = []
+    def observer_thread(*args, **kwargs):
+        observer = threading.Thread(*args, **kwargs)
+        test.worker_observers.append(observer)
+        return observer
+    test.enterContext(patch("clipear.service.threading", SimpleNamespace(Thread=observer_thread)))
+
+
+def wait_for_worker_observers(test):
+    for observer in test.worker_observers:
+        # The observer waits/reaps its actual child before finishing its final
+        # store transaction. Terminal job status alone cannot prove either.
+        observer.join(timeout=45)
+        test.assertFalse(observer.is_alive(), "Worker observer did not finish before workspace cleanup")
 
 
 class WorkerExitTests(unittest.TestCase):
@@ -21,8 +40,10 @@ class WorkerExitTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.settings = Settings(home=Path(self.temp.name) / "data")
         self.service = Service(self.settings)
+        track_worker_observers(self)
 
     def tearDown(self):
+        wait_for_worker_observers(self)
         self.temp.cleanup()
 
     def launch_exiting_worker(self, job_id, returncode):
@@ -44,12 +65,8 @@ class WorkerExitTests(unittest.TestCase):
                 if running:
                     self.service.store.claim_job(job_id)
                 self.launch_exiting_worker(job_id, returncode)
-                deadline = time.monotonic() + 2
-                while time.monotonic() < deadline:
-                    job = self.service.get_job(job_id)
-                    if job["status"] == "failed":
-                        break
-                    time.sleep(.01)
+                wait_for_worker_observers(self)
+                job = self.service.get_job(job_id)
                 self.assertEqual(job["status"], "failed", job)
                 self.assertIn(f"return code {returncode}", job["error"])
                 log = self.settings.home / "jobs" / job_id / "worker.log"
@@ -67,8 +84,38 @@ class WorkerExitTests(unittest.TestCase):
                 self.service.store.finish_job(job_id, result={"previews": []}, error=error)
                 before = self.service.get_job(job_id)
                 self.launch_exiting_worker(job_id, 23)
-                time.sleep(.05)
+                wait_for_worker_observers(self)
                 self.assertEqual(self.service.get_job(job_id), before)
+
+    def test_teardown_waits_for_observer_after_job_is_terminal(self):
+        job_id = self.service.store.new_job("preview", {})
+        self.service.store.finish_job(job_id, result={"previews": []})
+        entered, release = threading.Event(), threading.Event()
+        original_observation = self.service.store.worker_exited
+        def delayed_observation(*args):
+            entered.set()
+            if not release.wait(5):
+                raise AssertionError("Fixture never released the worker observer")
+            original_observation(*args)
+        with patch.object(self.service.store, "worker_exited", side_effect=delayed_observation):
+            self.launch_exiting_worker(job_id, 0)
+            self.assertTrue(entered.wait(5), "Worker exited without reaching its observer")
+            observer = self.worker_observers[0]
+            self.assertEqual(self.service.get_job(job_id)["status"], "succeeded")
+            original_join, original_cleanup = observer.join, self.temp.cleanup
+            def release_then_join(*args, **kwargs):
+                release.set()
+                original_join(*args, **kwargs)
+            def cleanup_after_observation():
+                self.assertFalse(observer.is_alive(), "Job status is terminal, but its observer still owns the workspace")
+                original_cleanup()
+            try:
+                with patch.object(observer, "join", side_effect=release_then_join), patch.object(self.temp, "cleanup", side_effect=cleanup_after_observation):
+                    self.tearDown()
+                self.assertFalse(self.settings.home.exists())
+            finally:
+                release.set()
+                original_join(timeout=5)
 
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "FFmpeg and ffprobe required")
@@ -82,8 +129,10 @@ class JobTests(unittest.TestCase):
         self.before = hashlib.sha256(self.source.read_bytes()).hexdigest()
         self.settings = Settings(home=self.root / "data", input_roots=(self.inputs,))
         self.service = Service(self.settings)
+        track_worker_observers(self)
 
     def tearDown(self):
+        wait_for_worker_observers(self)
         self.temp.cleanup()
 
     def wait(self, job_id):
@@ -92,6 +141,7 @@ class JobTests(unittest.TestCase):
             job = self.service.get_job(job_id)
             if job["status"] in {"failed", "succeeded"}:
                 self.assertEqual(job["status"], "succeeded", job)
+                wait_for_worker_observers(self)
                 return job["result"]
             time.sleep(.05)
         self.fail(f"Worker did not finish: {self.service.get_job(job_id)}")

@@ -147,11 +147,10 @@ launched desktop app the same PATH. For a terminal check, replace the example pa
 "/absolute/path/to/clipear/.venv/bin/python" -m clipear mcp --transport stdio
 ```
 
-On Windows PowerShell, use:
-
-```powershell
-& "C:\path\to\clipear\.venv\Scripts\python.exe" -m clipear mcp --transport stdio
-```
+On Windows, start the authenticated HTTP server in a separate PowerShell window
+and connect your agent to it. Windows stdio clients can terminate descendant
+workers when a chat disconnects, so that transport rejects background operations.
+See the [Windows MCP instructions](docs/setup.md#connect-an-mcp-client).
 
 Configure your client using the [platform examples](docs/setup.md#connect-an-mcp-client)
 and [examples/mcp.json](examples/mcp.json). Set its `command` to that absolute

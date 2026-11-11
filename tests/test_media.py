@@ -136,7 +136,7 @@ class MediaTests(unittest.TestCase):
         self.assertAlmostEqual(video["probe"]["duration"], 1.0, delta=0.08)
         audio = next(stream for stream in video["probe"]["streams"] if stream["codec_type"] == "audio")
         self.assertAlmostEqual(float(audio["duration"]), 1, delta=0.08)
-        self.assertEqual(Path(srt["path"]).read_text(), "1\n00:00:00,000 --> 00:00:00,250\nOlá\n\n2\n00:00:00,250 --> 00:00:01,000\nBNB\n\n")
+        self.assertEqual(Path(srt["path"]).read_text(encoding="utf-8"), "1\n00:00:00,000 --> 00:00:00,250\nOlá\n\n2\n00:00:00,250 --> 00:00:01,000\nBNB\n\n")
         self.assertEqual(plan, frozen)
 
     def test_partial_caption_cues_fail_before_writing_any_output(self):
@@ -206,7 +206,7 @@ class MediaTests(unittest.TestCase):
         self.assertAlmostEqual(video["probe"]["duration"], 2.6, delta=0.08)
         audio = next(stream for stream in video["probe"]["streams"] if stream["codec_type"] == "audio")
         self.assertAlmostEqual(float(audio["duration"]), 2.6, delta=0.08)
-        self.assertEqual(Path(srt["path"]).read_text(), "")
+        self.assertEqual(Path(srt["path"]).read_text(encoding="utf-8"), "")
 
     def test_pad_has_bars_and_crop_uses_distinct_left_and_right_framing(self):
         frames = {}

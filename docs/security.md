@@ -71,8 +71,9 @@ access to the source/job directories.
 ## HTTP and remote processing
 
 Streamable HTTP requires a strong `CLIPEAR_HTTP_TOKEN`. Every client must send it
-as a bearer token. The default bind address is `127.0.0.1`; stdio is preferable
-when client and processing host are the same computer.
+as a bearer token. The default bind address is `127.0.0.1`. Local macOS/Linux
+clients can use stdio; Windows background processing requires an HTTP server
+started separately from the MCP client.
 
 Before allowing connections from another host, configure TLS and authenticated
 network access appropriate to that host. clipear's bind/port flags do not create
@@ -84,9 +85,12 @@ Human browser review remains local to the processing host. It is separate from
 the MCP listener. A remote human needs a trusted connection to that host; an
 agent's HTTP token must not become an approval credential.
 
-Disconnecting an MCP client does not cancel a detached worker. Read the job's
-actual state and error. Detached processing is not a durable hosted scheduler:
-computer shutdown or process termination can still interrupt work.
+Disconnecting an MCP client does not cancel a detached worker on the supported
+processing transports. Windows stdio rejects background operations because a
+client's Windows Job Object can terminate descendant workers on disconnect.
+Separately launched HTTP processing avoids that client-owned process lifetime.
+Read the job's actual state and error. Detached processing is not a durable
+hosted scheduler: computer shutdown or process termination can interrupt work.
 
 When the launching parent observes a worker exiting without a terminal result,
 it records a failed job with the return code and log path. That reconciliation

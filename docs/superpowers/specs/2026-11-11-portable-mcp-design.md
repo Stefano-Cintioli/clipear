@@ -1,6 +1,6 @@
 # Portable clipear engine and MCP
 
-User authorization: after the read-only repository review and discussion of portable media processing, a small MCP surface, human confirmation, clean clips followed by optional finished exports, Stefano replied **"perfect, do it then"**. Routine implementation, dependency setup and local verification are authorized. No hosted public website, paid service, account upload, media publication or changes to private clip-agent are needed.
+Scope: portable media processing, a small MCP surface, human confirmation, clean clips followed by optional finished exports. No hosted public website, paid service, account upload, media publication or changes to private job repositories are needed.
 
 ## Intended result
 
@@ -11,6 +11,7 @@ Improve the existing public MIT clipear repository, keeping private jobs separat
 - Python 3.11+ package and CLI, using FFmpeg/ffprobe, yt-dlp and a configurable whisper.cpp binary/model. Paths use pathlib and subprocess argument lists; no Bash requirement in the new workflow. Software H.264 is the common baseline. Existing legacy scripts stay available but are labelled legacy.
 - Jobs and artifacts live in configurable user storage, outside tracked source. SQLite stores source records, immutable job requests, edit-plan revisions and approvals. Detached workers return a job ID immediately and retain progress, errors and results after the MCP connection closes.
 - A local stdio MCP plus authenticated Streamable HTTP serve the same tools. HTTP is single-user and localhost by default; running remotely requires TLS/network configuration and the user's token. It is not a multi-user hosted product or a native integration with every chat service. Camera files must be accessible on the processing host. Client configurations and protocol tests distinguish tested transports from unverified native apps.
+- Native Windows testing showed that stdio clients can place the server and its descendants in a Job Object that terminates workers on disconnect. Windows stdio therefore rejects background operations; a separately started authenticated HTTP server provides Windows processing. The CLI and macOS/Linux stdio workflow remain available.
 - File import is limited to host-configured input roots; URL ingest supports YouTube. Paths never become shell code. Source bytes are copied into job storage and fingerprinted. Original camera files are never edited.
 - Human confirmation is through a separate interactive CLI or loopback browser review, never an MCP approval tool. Approval binds the exact normalized plan, source fingerprint and revision; changes invalidate it. A render job freezes the approved snapshot. This is an MCP/API boundary, not protection against a person or agent with unrestricted access to the same OS account/database.
 
