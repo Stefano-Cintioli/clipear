@@ -1,0 +1,108 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-15-intel, macos-15]
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install FFmpeg on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - name: Install FFmpeg on macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          # The regular Homebrew formula can omit libass. Keep a runner binary
+          # only when it supports the actual caption filter and CPU encoder.
+          if ! ffmpeg -hide_banner -filters 2>/dev/null | awk '$2 == "subtitles" { found = 1 } END { exit !found }' ||
+             ! ffmpeg -hide_banner -encoders 2>/dev/null | awk '$2 == "libx264" { found = 1 } END { exit !found }'; then
+            if [[ "$(uname -m)" == "arm64" ]]; then
+              # Core ffmpeg-full has Apple Silicon bottles and is keg-only.
+              brew install --force-bottle ffmpeg-full
+              echo "$(brew --prefix ffmpeg-full)/bin" >> "$GITHUB_PATH"
+            else
+              # The current full formula has no Intel Mac bottle. Use the
+              # versioned static provider linked by ffmpeg.org, with archive
+              # hashes verified against its signed 9.0.2 releases.
+              media_tools="$RUNNER_TEMP/clipear-ffmpeg-9.0.2"
+              mkdir -p "$media_tools/bin"
+              curl --fail --location --retry 2 --max-time 120 https://evermeet.cx/ffmpeg/ffmpeg-9.0.2.zip -o "$media_tools/ffmpeg.zip"
+              curl --fail --location --retry 2 --max-time 120 https://evermeet.cx/ffmpeg/ffprobe-9.0.2.zip -o "$media_tools/ffprobe.zip"
+              echo "4acc0be580f9b2788029eb7bd4d645ff87968911b0a62aeeb3940d42d54558d5  $media_tools/ffmpeg.zip" | shasum -a 256 --check
+              echo "24a9c968cd4da72d99c7245e914b921815835eb6dff01d99868031aebaf1d439  $media_tools/ffprobe.zip" | shasum -a 256 --check
+              unzip -q "$media_tools/ffmpeg.zip" -d "$media_tools/bin"
+              unzip -q "$media_tools/ffprobe.zip" -d "$media_tools/bin"
+              chmod +x "$media_tools/bin/ffmpeg" "$media_tools/bin/ffprobe"
+              echo "$media_tools/bin" >> "$GITHUB_PATH"
+            fi
+          fi
+      - name: Install FFmpeg on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install ffmpeg --yes --no-progress
+      - name: Require media tools and caption capabilities
+        shell: python
+        run: |
+          import shutil
+          import subprocess
+
+          for tool in ("ffmpeg", "ffprobe"):
+              path = shutil.which(tool)
+              if not path:
+                  raise SystemExit(f"{tool} missing; media smoke tests must not be skipped")
+              print(f"Using {tool}: {path}", flush=True)
+              subprocess.run([path, "-version"], check=True)
+
+          for flag, feature in (("-filters", "subtitles"), ("-encoders", "libx264")):
+              result = subprocess.run(["ffmpeg", "-hide_banner", flag], capture_output=True, text=True, check=True)
+              matches = [line.strip() for line in result.stdout.splitlines()
+                         if len(line.split()) > 1 and line.split()[1] == feature]
+              if not matches:
+                  raise SystemExit(f"FFmpeg lacks {feature}; install a build with libass and libx264 before running media tests")
+              print(f"Verified {feature}: {matches[0]}", flush=True)
+      - name: Create isolated Python environment
+        run: python -m venv .venv
+      - name: Install package on macOS or Linux
+        if: runner.os != 'Windows'
+        run: .venv/bin/python -m pip install -e .
+      - name: Install package on Windows
+        if: runner.os == 'Windows'
+        run: .\.venv\Scripts\python.exe -m pip install -e .
+      - name: Run tests on macOS or Linux
+        if: runner.os != 'Windows'
+        run: .venv/bin/python -m unittest discover -s tests -v
+      - name: Run tests on Windows
+        if: runner.os == 'Windows'
+        run: .\.venv\Scripts\python.exe -m unittest discover -s tests -v
+      - name: Check CLI entry point on macOS or Linux
+        if: runner.os != 'Windows'
+        run: .venv/bin/python -m clipear --help
+      - name: Check CLI entry point on Windows
+        if: runner.os == 'Windows'
+        run: .\.venv\Scripts\python.exe -m clipear --help

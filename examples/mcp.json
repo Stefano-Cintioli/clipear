@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "clipear": {
+      "command": "/ABSOLUTE/PATH/TO/clipear/.venv/bin/python",
+      "args": ["-m", "clipear", "mcp", "--transport", "stdio"]
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "brief": {
+    "goal": "Explain one useful idea from the interview",
+    "audience": "People new to the topic",
+    "language": "en",
+    "tone": "Clear and conversational",
+    "platforms": [
+      "YouTube",
+      "Instagram"
+    ],
+    "duration_preference": "About 15 seconds per clip",
+    "pace": "Keep complete thoughts with a natural delivery",
+    "must_include": [
+      "The speaker's explanation and its context"
+    ],
+    "avoid": [
+      "Unsupported claims",
+      "Sentences cut halfway through"
+    ],
+    "glossary": [],
+    "processing_context": "Process on the configured host; review before sharing",
+    "privacy_mode": "local"
+  },
+  "clips": [
+    {
+      "id": "idea-01",
+      "title": "One useful idea",
+      "start": 5,
+      "end": 20
+    }
+  ],
+  "outputs": [
+    {
+      "name": "landscape",
+      "ratio": "16:9",
+      "height": 720,
+      "fit": "pad",
+      "position": "center"
+    },
+    {
+      "name": "portrait",
+      "ratio": "9:16",
+      "height": 1280,
+      "fit": "pad",
+      "position": "center"
+    }
+  ],
+  "captions": {
+    "mode": "sidecar",
+    "language": "en"
+  },
+  "delivery": "clean",
+  "playback_speed": 1,
+  "quality": "balanced"
+}
