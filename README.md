@@ -58,6 +58,10 @@ missing dependencies; it does not install tools, download a model, or establish
 that a full transcription/render succeeded. Confirm the checks you need before
 processing a video.
 
+Intel Mac installs may build an upstream Python dependency from source; the
+[setup guide](docs/setup.md#intel-mac-when-a-dependency-builds-from-source) covers
+the additional compiler, Rust and OpenSSL requirements observed in native CI.
+
 ## Make your first clips
 
 The examples below use `clipear` after activating the virtual environment. You can

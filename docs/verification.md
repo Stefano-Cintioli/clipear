@@ -65,6 +65,12 @@ descendants on disconnect. Fixes use explicit observer joins, UTF-8 reads,
 feature-checked caption-enabled binaries and separately hosted authenticated HTTP
 for Windows background processing. The full matrix is rerun for the correction.
 
+The [corrected implementation run](https://github.com/Stefano-Cintioli/clipear/actions/runs/43081768146)
+passed all eight native jobs on 2026-11-11. Intel Mac installation compiled the
+cryptography 50.0.2 dependency using the runner's build tools; fresh-machine
+prerequisites are now explicit in the setup guide. Final documentation changes
+are also checked through the same release workflow.
+
 Native Claude, Codex, ChatGPT and Grok apps have not been registered or tested by
 this run. Successful MCP protocol checks do not prove an app-specific integration.
 No public website, paid service or remote worker was provisioned. A detached

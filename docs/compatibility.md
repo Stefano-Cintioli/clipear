@@ -41,6 +41,8 @@ an architecture does not prove clipear was tested there.
 ## Processing tools
 
 - Python 3.11+ is required; CI currently exercises 3.11/3.12.
+- Intel Mac CI built the SDK's cryptography 50.0.2 dependency from source using
+  the runner's toolchain. Fresh machines may need the [documented build prerequisites](setup.md#intel-mac-when-a-dependency-builds-from-source).
 - FFmpeg and ffprobe are external. The common output baseline is software H.264
   with square pixels, yuv420p, and AAC when input audio exists.
 - Finished burned captions need an FFmpeg build with libass and the `subtitles`

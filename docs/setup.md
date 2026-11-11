@@ -49,6 +49,35 @@ The package installation brings in the versions of yt-dlp and the MCP SDK pinned
 in [pyproject.toml](../pyproject.toml). It does not install FFmpeg, whisper.cpp, or a
 speech model.
 
+### Intel Mac: when a dependency builds from source
+
+The native Intel CI installation built the MCP SDK's `cryptography` dependency
+(50.0.2) from source. That succeeded on a runner with build tools; a fresh Mac may
+need them before installation can finish. If pip reports a cryptography build
+error, first update pip inside the virtual environment:
+
+```sh
+.venv/bin/python -m pip install --upgrade pip
+```
+
+If it still needs a source build, install Apple's command line tools, a current
+Rust toolchain using the [official Rust installer](https://www.rust-lang.org/tools/install),
+and OpenSSL 3. With Homebrew already available, the remaining commands are:
+
+```sh
+xcode-select --install
+brew install openssl@3
+rustc --version
+OPENSSL_DIR="$(brew --prefix openssl@3)" .venv/bin/python -m pip install -e .
+```
+
+Complete any command line tools installer before rerunning pip; if they are
+already installed, that installer is unnecessary. `rustc` must be available on
+PATH; cryptography 50.0.2 requires Rust 1.83.0 or newer for building. These are
+installation requirements, not additional services. Follow the upstream
+[cryptography macOS build instructions](https://cryptography.io/en/50.0.2/installation/#building-cryptography-on-macos)
+for compiler/header errors. clipear does not silently install system toolchains.
+
 ## 2. Install FFmpeg and ffprobe
 
 FFmpeg reads camera formats and makes clips. ffprobe inspects source and output
